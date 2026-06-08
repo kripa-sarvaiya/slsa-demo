@@ -1,0 +1,42 @@
+name: SLSA Provenance Generation
+
+on:
+  push:
+    tags:
+      - 'v*'   # Triggers only on version tags
+
+jobs:
+  build:
+    name: Build Artifact
+    runs-on: ubuntu-latest
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build the artifact
+        run: ./build.sh
+
+      - name: Generate cryptographic hash
+        id: hash
+        run: |
+          sha256sum my-artifact.txt > checksums.txt
+          echo "hashes=$(cat checksums.txt | base64 -w0)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact to GitHub Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-artifact
+          path: my-artifact.txt
+
+  provenance:
+    needs: [build]
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+    with:
+      base64-subjects: "${{ needs.build.outputs.hashes }}"
+      upload-assets: true
