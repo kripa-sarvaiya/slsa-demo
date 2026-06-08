@@ -1,10 +1,8 @@
 name: SLSA Provenance Generation
-
 on:
   push:
     tags:
       - 'v*'   # Triggers only on version tags
-
 jobs:
   build:
     name: Build Artifact
@@ -14,22 +12,18 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Build the artifact
         run: ./build.sh
-
       - name: Generate cryptographic hash
         id: hash
         run: |
           sha256sum my-artifact.txt > checksums.txt
           echo "hashes=$(cat checksums.txt | base64 -w0)" >> "$GITHUB_OUTPUT"
-
       - name: Upload artifact to GitHub Actions
         uses: actions/upload-artifact@v4
         with:
           name: my-artifact
           path: my-artifact.txt
-
   provenance:
     needs: [build]
     permissions:
@@ -40,3 +34,18 @@ jobs:
     with:
       base64-subjects: "${{ needs.build.outputs.hashes }}"
       upload-assets: true
+  publish-artifact:
+    name: Attach artifact to release
+    needs: [provenance]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download built artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: my-artifact
+      - name: Upload artifact to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" my-artifact.txt --clobber --repo "${{ github.repository }}"
